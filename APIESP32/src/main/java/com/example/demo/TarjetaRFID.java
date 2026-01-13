@@ -4,20 +4,20 @@ import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import java.time.LocalDateTime;
 
-@Document(collection = "luz_logs")
-public class Luz {
+@Document(collection = "rfid_logs")
+public class TarjetaRFID {
     @Id
     private String id;
     
-    private boolean iluminadad;
+    private String uid;
     private LocalDateTime fecha;
 
-    public Luz() {
+    public TarjetaRFID() {
         this.fecha = LocalDateTime.now();
     }
 
-    public Luz(boolean iluminadad) {
-        this.iluminadad = iluminadad;
+    public TarjetaRFID(String uid) {
+        this.uid = uid;
         this.fecha = LocalDateTime.now();
     }
 
@@ -29,12 +29,12 @@ public class Luz {
         this.id = id;
     }
 
-    public boolean isIluminadad() {
-        return iluminadad;
+    public String getUid() {
+        return uid;
     }
 
-    public void setIluminadad(boolean iluminadad) {
-        this.iluminadad = iluminadad;
+    public void setUid(String uid) {
+        this.uid = uid;
     }
 
     public LocalDateTime getFecha() {
