@@ -53,10 +53,10 @@ public class Esp32Controller {
         return ResponseEntity.ok(controlPresenciaRepository.findAll());
     }
 
-    // 2. Obtener solo Meteorología
-    @GetMapping("/datos/metereologia")
+    // 2. Obtener solo Meteorología (Solo el más reciente)
+    @GetMapping("/datos/meteorologia")
     public ResponseEntity<List<Metereologia>> obtenerDatosMetereologia() {
-        return ResponseEntity.ok(metereologiaRepository.findAll());
+        return ResponseEntity.ok(metereologiaRepository.findTop1ByOrderByFechaDesc());
     }
 
     // 3. Obtener solo Luz
