@@ -1,5 +1,8 @@
+#include <Wire.h>
+#include <LiquidCrystal_PCF8574.h>
 #include <SPI.h>
 #include <MFRC522.h>
+#include <Keypad.h>
 #include "DHT.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
@@ -15,7 +18,8 @@ const char* password = "123456789";
 // IMPORTANTE: Si usas Docker, asegurate de que esta IP es la de tu PC (ipconfig)
 // y NO "localhost" ni "127.0.0.1". Windows Firewall debe permitir puerto 8080.
 // ------------------------------------------------------------------------------------
-const char* serverName = "http://10.132.5.62:8080/api/datos"; 
+const char* serverName = "http://10.245.113.62:8080/api/datos"; 
+ 
 
 // =====================
 // SERVER WEB (Para peticiones de sensores)
@@ -37,13 +41,47 @@ WebServer server(80);
 // =====================
 // OBJETOS
 // =====================
+LiquidCrystal_PCF8574 lcd(0x27);
 DHT dht(DHTPIN, DHTTYPE);
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 
 // =====================
+// VARIABLES GLOBALES
+// =====================
+const unsigned long sensorInterval = 30000; // Intervalo de lectura de sensores en ms (30 segundos)
+unsigned long lastSensorUpdate = 0;
+
+unsigned long lastLcdUpdate = 0;
+bool lcdActive = false;
+
+// Variable global para guardar el nombre del usuario
+String currentUsuarioLeido = "";
+
+// =====================
+// DEFINICIÓN KEYPAD
+// =====================
+const byte ROWS = 4; 
+const byte COLS = 4; 
+char keys[ROWS][COLS] = {
+  {'1','2','3','A'},
+  {'4','5','6','B'},
+  {'7','8','9','C'},
+  {'*','0','#','D'}
+};
+byte rowPins[ROWS] = {32, 33, 25, 26}; 
+byte colPins[COLS] = {16, 17, 12, 13}; 
+
+Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS );
+
+// =====================
+// DECLARACIÓN DE FUNCIONES PREVIAS
+// =====================
+void enviarDatosAPI(float temp, float hum, bool iluminadad, String uid, String token, String pin);
+
+// =====================
 // FUNCIONES AUXILIARES
 // =====================
-void enviarDatosAPI(float temp, float hum, bool iluminadad, String uid, String usuario, String password) {
+void enviarDatosAPI(float temp, float hum, bool iluminadad, String uid, String token, String pin) {
     if(WiFi.status() == WL_CONNECTED){
         HTTPClient http;
         http.begin(serverName);
@@ -53,18 +91,28 @@ void enviarDatosAPI(float temp, float hum, bool iluminadad, String uid, String u
         
         bool hayDatos = false;
 
-        // 1. LOGIN: Si hay Usuario y Password
-        if (usuario != "" && password != "") {
-             doc["usuario"] = usuario;
-             doc["password"] = password;
+        // 1. LOGIN: Si hay Token (o PIN)
+        if (token != "") {
+             doc["token"] = token;
              hayDatos = true;
         }
+        
+        if (pin != "") {
+             doc["pin"] = pin;
+             hayDatos = true;
+        }
+
         // 2. Si no es Login, miramos si es UID simple o Sensores
-        else if (uid != "") {
+        if (uid != "") { // Cambiado 'else if' a 'if' para permitir enviar UID + PIN si fuera necesario
             doc["rfidUid"] = uid;
             hayDatos = true;
         } 
-        else {
+        
+        // Solo datos sensores si NO estamos autenticando (para no mezclar tipos de mensaje si la API no lo soporta)
+        // O si quieres enviar todo junto, quita el 'else'. 
+        // Asumo que si hay UID/Token/Pin es un evento de acceso.
+        // Si no hay nada de eso, es lectura de sensores ambiental.
+        if (token == "" && uid == "" && pin == "") {
             // Luz siempre es válida (lectura digital)
             doc["luz"] = iluminadad;
             hayDatos = true;
@@ -85,6 +133,14 @@ void enviarDatosAPI(float temp, float hum, bool iluminadad, String uid, String u
         serializeJson(doc, requestBody);
 
         Serial.println("Enviando a API: " + requestBody);
+        
+        // Feedback visual de "Enviando..."
+        bool esAcceso = (uid != "" || token != "" || pin != "");
+        if (esAcceso) {
+            lcd.clear();
+            lcd.setCursor(0, 0); lcd.print("Verificando...");
+        }
+
         int httpResponseCode = http.POST(requestBody);
         
         if (httpResponseCode > 0) {
@@ -92,18 +148,48 @@ void enviarDatosAPI(float temp, float hum, bool iluminadad, String uid, String u
             Serial.print("✅ API Response Code: ");
             Serial.println(httpResponseCode);
             Serial.println("📥 API Response: " + response);
+
+            // --- RESPUESTA EN PANTALLA LCD ---
+            if (esAcceso) {
+                lcd.clear();
+                if (httpResponseCode == 200) {
+                    if (response.indexOf("SALIDA") >= 0) {
+                        lcd.setCursor(0, 0); lcd.print("Hasta luego");
+                        lcd.setCursor(0, 1); lcd.print(currentUsuarioLeido); 
+                    } else if (response.indexOf("ENTRADA") >= 0) {
+                        lcd.setCursor(0, 0); lcd.print("Hola");
+                        lcd.setCursor(6, 0); lcd.print(currentUsuarioLeido);
+                        lcd.setCursor(0, 1); lcd.print("Adelante ->");
+                    } else {
+                        // Fallback
+                        lcd.setCursor(0, 0); lcd.print("Acceso");
+                        lcd.setCursor(0, 1); lcd.print("Concedido");
+                    }
+                } else {
+                    lcd.setCursor(0, 0); lcd.print("Acceso");
+                    lcd.setCursor(0, 1); lcd.print("Denegado");
+                }
+                lastLcdUpdate = millis();
+                lcdActive = true;
+            }
+            // ---------------------------------
+
         } else {
             Serial.print("❌ Error API: ");
             Serial.println(httpResponseCode);
             if (httpResponseCode == -1) {
                 Serial.println("💡 Error -1: No se pudo conectar al servidor");
-                Serial.println("   Verifica:");
-                Serial.println("   - ¿El servidor está corriendo en " + String(serverName) + "?");
-                Serial.println("   - ¿La IP es correcta? (Tu IP: " + WiFi.localIP().toString() + ")");
-                Serial.println("   - ¿El firewall permite conexiones?");
-            } else if (httpResponseCode == -11) {
-                Serial.println("💡 Error -11: Timeout - el servidor no respondió a tiempo");
             }
+
+            // --- ERROR EN PANTALLA LCD ---
+            if (esAcceso) {
+                lcd.clear();
+                lcd.setCursor(0, 0); lcd.print("Error Conexion");
+                lcd.setCursor(0, 1); lcd.print("Err: " + String(httpResponseCode));
+                lastLcdUpdate = millis();
+                lcdActive = true;
+            }
+            // -----------------------------
         }
         http.end();
     } else {
@@ -147,6 +233,11 @@ void handleRoot() {
 // SETUP
 // =====================
 void setup() {
+  Wire.begin(27, 14);
+  lcd.begin(16, 2);
+  lcd.setBacklight(255);
+  lcd.clear();
+
   Serial.begin(115200);
   delay(3000);
 
@@ -177,11 +268,12 @@ void setup() {
   mfrc522.PCD_Init();
 
   Serial.println("=================================");
-  Serial.println("SISTEMA HÍBRIDO: RFID (Loop) + Sensores (HTTP)");
+  Serial.println("SISTEMA DE TOKENS: RFID (Loop) + Sensores (HTTP)");
   Serial.println("=================================");
 }
 
-// Loop
+// =====================
+// LOOP
 // =====================
 void loop() {
   // 1. ATENDER PETICIONES WEB (SENSORES)
@@ -206,18 +298,17 @@ void loop() {
       for (byte i = 0; i < 6; i++) key.keyByte[i] = 0xFF; // Clave por defecto
 
       // --- AUTENTICACIÓN Y LECTURA SECTOR 4 ---
-      // Bloque 16 = Usuario
-      // Bloque 17 = Password
+      // Bloque 17 = Usuario
+      // Bloque 18 = Token
       
       MFRC522::StatusCode status;
       byte buffer[18];
       byte size = sizeof(buffer);
       String usuarioLeido = "";
-      String passwordLeido = "";
-      bool errorLecturaUsuario = false;
-      bool errorLecturaPassword = false;
+      String tokenLeido = "";
+      bool errorLectura = false;
 
-      // 1. LEER BLOQUE 17 (USUARIO) - Ajustado según datos de tarjeta
+      // 1. LEER BLOQUE 17 (USUARIO)
       byte blockUser = 17;
       status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, blockUser, &key, &(mfrc522.uid));
       if (status == MFRC522::STATUS_OK) {
@@ -234,60 +325,135 @@ void loop() {
               usuarioLeido.trim(); // Eliminar espacios
           } else {
               Serial.println("❌ Error leyendo bloque 17 (Usuario): " + String(status));
-              errorLecturaUsuario = true;
+              errorLectura = true;
           }
       } else {
           Serial.println("❌ Error autenticando bloque 17: " + String(status));
-          errorLecturaUsuario = true;
+          errorLectura = true;
       }
 
-      // 2. LEER BLOQUE 18 (PASSWORD) - Ajustado según datos de tarjeta
-      byte blockPass = 18;
-      status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, blockPass, &key, &(mfrc522.uid));
+      // 2. LEER BLOQUE 18 (TOKEN)
+      byte blockToken = 18;
+      status = mfrc522.PCD_Authenticate(MFRC522::PICC_CMD_MF_AUTH_KEY_A, blockToken, &key, &(mfrc522.uid));
       if (status == MFRC522::STATUS_OK) {
-           size = sizeof(buffer); // Reset size
-           status = mfrc522.MIFARE_Read(blockPass, buffer, &size);
-           if (status == MFRC522::STATUS_OK) {
-              Serial.print("Bloque 18 (Pass) raw: ");
+          size = sizeof(buffer); // Reset size
+          status = mfrc522.MIFARE_Read(blockToken, buffer, &size);
+          if (status == MFRC522::STATUS_OK) {
+              Serial.print("Bloque 18 (Token) raw: ");
               for (byte i = 0; i < 16; i++) {
                   Serial.print(buffer[i], HEX);
                   Serial.print(" ");
-                  if (buffer[i] >= 32 && buffer[i] <= 126) passwordLeido += (char)buffer[i];
+                  if (buffer[i] >= 32 && buffer[i] <= 126) tokenLeido += (char)buffer[i];
               }
               Serial.println();
-              passwordLeido.trim(); // Eliminar espacios
-           } else {
-              Serial.println("❌ Error leyendo bloque 18 (Password): " + String(status));
-              errorLecturaPassword = true;
-           }
+              tokenLeido.trim(); // Eliminar espacios
+          } else {
+              Serial.println("❌ Error leyendo bloque 18 (Token): " + String(status));
+              errorLectura = true;
+          }
       } else {
           Serial.println("❌ Error autenticando bloque 18: " + String(status));
-          errorLecturaPassword = true;
+          errorLectura = true;
+      }
+      
+      // Guardar en variable global para usar en enviarDatosAPI
+      currentUsuarioLeido = usuarioLeido;
+
+      // --- LCD: BIENVENIDA ---
+      lcd.clear();
+      if (usuarioLeido != "") {
+        lcd.setCursor(0, 0);
+        lcd.print("Bienvenido");
+        lcd.setCursor(0, 1);
+        lcd.print(usuarioLeido);
+        delay(1500); // Dar un momento para leer el saludo
+      } else {
+        lcd.setCursor(0, 0);
+        lcd.print("Usuario no");
+        lcd.setCursor(0, 1);
+        lcd.print("registrado");
+        delay(1500);
+      }
+      
+      // --- PEDIR PIN ---
+      String pinIngresado = "";
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Ingrese PIN:");
+      lcd.setCursor(0, 1); // Cursor para asteriscos
+      
+      unsigned long startTime = millis();
+      bool pinCompleto = false;
+      
+      // Bucle de espera de PIN (10 segundos timeout)
+      while (millis() - startTime < 10000 && !pinCompleto) { 
+        char key = keypad.getKey();
+        if (key) {
+           startTime = millis(); // Reset timeout al pulsar tecla
+           
+           if (key == '#') {
+             pinCompleto = true; // Enter
+           } else if (key == '*') {
+             pinIngresado = ""; // Borrar
+             lcd.setCursor(0, 1);
+             lcd.print("                "); // Limpiar línea
+             lcd.setCursor(0, 1);
+           } else {
+             if (pinIngresado.length() < 16) { // Evitar desbordar pantalla
+                pinIngresado += key;
+                lcd.print("*");
+             }
+           }
+        }
+        delay(10); // Debounce simple
+      }
+      
+      if (!pinCompleto && pinIngresado.length() == 0) {
+         Serial.println("Timeout PIN - Enviando sin PIN");
       }
 
-      Serial.println("Usuario Leido: [" + usuarioLeido + "]");
-      Serial.println("Password Leido: [" + passwordLeido + "]");
+      // Actualizar temporizador LCD para que se apague después
+      lastLcdUpdate = millis();
+      lcdActive = true;
 
-      // DECISIÓN DE QUÉ ENVIAR
-      if (usuarioLeido != "" && passwordLeido != "") {
-          // CASO 1: AMBOS CAMPOS LEÍDOS CORRECTAMENTE
-          Serial.println("✅ Enviando credenciales completas");
-          enviarDatosAPI(NAN, NAN, false, "", usuarioLeido, passwordLeido);
-      } else if (usuarioLeido == "" && passwordLeido == "" && !errorLecturaUsuario && !errorLecturaPassword) {
-          // CASO 2: BLOQUES VACÍOS (tarjeta sin escribir) -> Enviar solo UID
-          Serial.println("⚠️ Tarjeta sin credenciales, enviando UID: " + uidReal);
-          enviarDatosAPI(NAN, NAN, false, uidReal, "", ""); 
+      // DECISIÓN DE QUÉ ENVIAR (Prioridad al Token)
+      if (tokenLeido != "") {
+          // CASO 1: TOKEN LEIDO + PIN
+          Serial.println("✅ Enviando Token + PIN");
+          enviarDatosAPI(NAN, NAN, false, "", tokenLeido, pinIngresado);
+      } else if (tokenLeido == "" && !errorLectura) {
+          // CASO 2: SOLO UID + PIN
+          Serial.println("⚠️ Tarjeta sin token, enviando UID: " + uidReal);
+          enviarDatosAPI(NAN, NAN, false, uidReal, "", pinIngresado); 
       } else {
-          // CASO 3: Credenciales parciales o errores de lectura
-          Serial.println("⚠️ Credenciales incompletas o error de lectura");
-          if (usuarioLeido != "" || passwordLeido != "") {
-              Serial.println("💡 Sugerencia: Verifica que la tarjeta esté bien escrita (bloques 16 y 17)");
-          }
+          // CASO 3: Error lectura + PIN
+          Serial.println("⚠️ Error de lectura");
           Serial.println("📤 Enviando UID como respaldo: " + uidReal);
-          enviarDatosAPI(NAN, NAN, false, uidReal, "", ""); 
+          enviarDatosAPI(NAN, NAN, false, uidReal, "", pinIngresado); 
       }
 
       mfrc522.PICC_HaltA();
       mfrc522.PCD_StopCrypto1();
+  }
+
+  // 3. LIMPIAR LCD TRAS 30 SEGUNDOS
+  if (lcdActive && (millis() - lastLcdUpdate > 30000)) {
+    lcd.clear();
+    lcdActive = false; 
+  }
+
+  // 4. LECTURA PERIODICA DE SENSORES
+  if (millis() - lastSensorUpdate > sensorInterval) {
+      Serial.println("⏰ Tarea periódica: Enviando datos de sensores...");
+      
+      float h = dht.readHumidity();
+      float t = dht.readTemperature();
+      int l = digitalRead(LDRPIN);
+      bool luz = !(l == HIGH); // true si hay luz (ajustar según tu pullup/down)
+
+      // Enviamos datos (uid, token, pin vacíos)
+      enviarDatosAPI(t, h, luz, "", "", ""); 
+      
+      lastSensorUpdate = millis();
   }
 }

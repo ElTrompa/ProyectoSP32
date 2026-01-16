@@ -7,6 +7,16 @@ public class DatosSensorDTO {
     private String rfidUid;
     private String usuario;
     private String password;
+    private String token;
+    private String pin;
+
+    public String getPin() {
+        return pin;
+    }
+
+    public void setPin(String pin) {
+        this.pin = pin;
+    }
 
     public Double getTemperatura() {
         return temperatura;
@@ -54,5 +64,13 @@ public class DatosSensorDTO {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public String getToken() {
+        return token;
+    }
+
+    public void setToken(String token) {
+        this.token = token;
     }
 }

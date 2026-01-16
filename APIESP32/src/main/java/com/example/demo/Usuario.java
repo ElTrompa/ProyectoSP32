@@ -9,13 +9,20 @@ public class Usuario {
     private String id;
     
     private String username;
-    private String password;
+    private String password; // Se usará como PIN tambien
+    private String rfidToken;
 
     public Usuario() {}
 
     public Usuario(String username, String password) {
         this.username = username;
         this.password = password;
+    }
+    
+    public Usuario(String username, String password, String rfidToken) {
+        this.username = username;
+        this.password = password;
+        this.rfidToken = rfidToken;
     }
 
     public String getId() {
@@ -40,5 +47,13 @@ public class Usuario {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public String getRfidToken() {
+        return rfidToken;
+    }
+
+    public void setRfidToken(String rfidToken) {
+        this.rfidToken = rfidToken;
     }
 }

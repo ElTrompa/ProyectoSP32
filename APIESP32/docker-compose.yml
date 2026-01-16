@@ -3,12 +3,17 @@ services:
   mongodb:
     image: mongo:latest
     container_name: mongodb_esp32
+    restart: always
+    environment:
+      MONGO_INITDB_DATABASE: esp32_iot
     ports:
       - "27017:27017"
     volumes:
       - mongodb_data:/data/db
-
-
+      - mongodb_config:/data/configdb
 
 volumes:
   mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
