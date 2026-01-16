@@ -23,7 +23,12 @@
       "edgeToEdgeEnabled": true
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "devServer": {
+        "proxy": {
+          "/api": "http://10.245.113.62:8080"
+        }
+      }
     }
   }
 }
