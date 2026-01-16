@@ -20,6 +20,9 @@ export default function HomeScreen({ navigation }) {
       <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('Presencia')}>
         <Text style={styles.buttonText}>Control de Presencia</Text>
       </TouchableOpacity>
+      <TouchableOpacity style={styles.button} onPress={() => navigation.navigate('AllData')}>
+        <Text style={styles.buttonText}>Ver Todos los Datos</Text>
+      </TouchableOpacity>
     </View>
   );
 }

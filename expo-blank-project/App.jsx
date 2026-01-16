@@ -7,6 +7,7 @@ import SensorScreen from './screens/SensorScreen';
 import RFIDScreen from './screens/RFIDScreen';
 import UsuarioScreen from './screens/UsuarioScreen';
 import PresenciaScreen from './screens/PresenciaScreen';
+import AllDataScreen from './screens/AllDataScreen';
 
 const Stack = createStackNavigator();
 
@@ -21,6 +22,7 @@ export default function App() {
         <Stack.Screen name="RFID" component={RFIDScreen} options={{ title: 'RFID' }} />
         <Stack.Screen name="Usuario" component={UsuarioScreen} options={{ title: 'Usuarios' }} />
         <Stack.Screen name="Presencia" component={PresenciaScreen} options={{ title: 'Presencia' }} />
+        <Stack.Screen name="AllData" component={AllDataScreen} options={{ title: 'Todos los Datos' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

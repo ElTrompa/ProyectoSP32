@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, Button } from 'react-native';
 import axios from 'axios';
 
-const API_URL = '/api/datos';
+const API_URL = 'http://10.245.113.62:8080/api/datos';
 
 export default function LuzScreen() {
   const [luzData, setLuzData] = useState([]);
