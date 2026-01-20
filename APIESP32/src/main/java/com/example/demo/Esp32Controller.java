@@ -40,10 +40,11 @@ public class Esp32Controller {
     @GetMapping("/datos")
     public ResponseEntity<Map<String, Object>> obtenerTodosLosDatos() {
         Map<String, Object> respuesta = new HashMap<>();
-        respuesta.put("metereologia", metereologiaRepository.findAll());
+        respuesta.put("meteorologia", metereologiaRepository.findAll());
         respuesta.put("luz", luzRepository.findAll());
-        respuesta.put("accesos_rfid", tarjetaRFIDRepository.findAll());
-        respuesta.put("control_presencia", controlPresenciaRepository.findAll()); // Añadido
+        respuesta.put("rfid", tarjetaRFIDRepository.findAll());
+        respuesta.put("usuarios", usuarioRepository.findAll());
+        respuesta.put("presencia", controlPresenciaRepository.findAll());
         return ResponseEntity.ok(respuesta);
     }
 
@@ -69,6 +70,12 @@ public class Esp32Controller {
     @GetMapping("/datos/rfid")
     public ResponseEntity<List<TarjetaRFID>> obtenerDatosRFID() {
         return ResponseEntity.ok(tarjetaRFIDRepository.findAll());
+    }
+
+    // 5. Obtener solo Presencia
+    @GetMapping("/datos/presencia")
+    public ResponseEntity<List<ControlPresencia>> obtenerDatosPresencia() {
+        return ResponseEntity.ok(controlPresenciaRepository.findAll());
     }
 
     // Endpoint para registrar nuevos usuarios dinámicamente
