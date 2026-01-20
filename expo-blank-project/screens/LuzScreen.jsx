@@ -1,45 +1,81 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, StyleSheet, Button } from 'react-native';
+﻿import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import axios from 'axios';
-
-const API_URL = 'http://10.245.113.62:8080/api/datos';
+import { API_URL, THEME } from '../config';
 
 export default function LuzScreen() {
   const [luzData, setLuzData] = useState([]);
+  const [currentLevel, setCurrentLevel] = useState(0);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchLuzData();
   }, []);
 
   const fetchLuzData = async () => {
-    console.log('Fetching luz data');
+    setLoading(true);
     try {
-      const response = await axios.get(API_URL);
-      console.log('Response data:', response.data);
-      setLuzData(response.data.luz || []);
-      console.log('Luz data set:', response.data.luz);
+      const response = await axios.get(API_URL + '/datos');
+      const data = response.data.luz || [];
+      // Sort desc
+      data.sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
+      setLuzData(data);
+      if (data.length > 0) {
+        setCurrentLevel(data[0].nivelLuz);
+      }
     } catch (error) {
-      console.error('Error fetching luz data:', error);
+      console.error(error);
     }
+    setLoading(false);
   };
 
-  const renderItem = ({ item }) => (
-    <View style={styles.item}>
-      <Text style={styles.text}>Iluminación: {item.iluminadad ? 'Encendida' : 'Apagada'}</Text>
-      <Text style={styles.text}>Fecha: {item.fecha}</Text>
-      <Text style={styles.text}>ID: {item.id}</Text>
-    </View>
-  );
+  const getLightIconAndColor = (level) => {
+      if (level < 30) return { icon: 'brightness-2', color: '#555' }; // Very dark
+      if (level < 100) return { icon: 'brightness-3', color: '#888' }; // Dim
+      if (level < 200) return { icon: 'brightness-4', color: '#ccc' }; // Normal
+      if (level < 300) return { icon: 'brightness-5', color: '#FFD700' }; // Bright
+      return { icon: 'brightness-7', color: '#FFA500' }; // Very bright
+  };
+
+  const currentStatus = getLightIconAndColor(currentLevel);
+
+  const renderItem = ({ item }) => {
+    const status = getLightIconAndColor(item.nivelLuz);
+    return (
+      <View style={styles.item}>
+        <MaterialCommunityIcons name={status.icon} size={24} color={status.color} style={{ marginRight: 15 }} />
+        <View>
+            <Text style={styles.itemText}>Nivel: {item.nivelLuz} lux</Text>
+            <Text style={styles.itemDate}>{new Date(item.fecha).toLocaleString()}</Text>
+        </View>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Datos de Luz</Text>
-      <Button title="Actualizar" onPress={fetchLuzData} />
-      <FlatList
-        data={luzData}
-        renderItem={renderItem}
-        keyExtractor={(item) => item.id}
-      />
+      {/* Hero Section */}
+      <View style={styles.hero}>
+        <MaterialCommunityIcons name={currentStatus.icon} size={80} color={currentStatus.color} />
+        <Text style={styles.heroValue}>{currentLevel}</Text>
+        <Text style={styles.heroLabel}>Nivel de Luz Actual (Lux)</Text>
+      </View>
+
+      <Text style={styles.subtitle}>Historial</Text>
+
+      { loading ? (
+        <ActivityIndicator size="large" color={THEME.primary} />
+      ) : (
+        <FlatList
+            data={luzData}
+            keyExtractor={(item) => item.id}
+            renderItem={renderItem}
+            contentContainerStyle={styles.list}
+            refreshing={loading}
+            onRefresh={fetchLuzData}
+        />
+      )}
     </View>
   );
 }
@@ -47,31 +83,57 @@ export default function LuzScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: THEME.background,
     padding: 20,
   },
-  title: {
-    fontSize: 24,
-    color: '#fff',
-    marginBottom: 20,
+  hero: {
+    alignItems: 'center',
+    marginVertical: 20,
+    backgroundColor: THEME.card,
+    padding: 30,
+    borderRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    elevation: 8,
+  },
+  heroValue: {
+    fontSize: 48,
+    fontWeight: 'bold',
+    color: THEME.text,
+    marginTop: 10,
+  },
+  heroLabel: {
+    fontSize: 16,
+    color: THEME.textSecondary,
+    marginTop: 5,
+  },
+  subtitle: {
+    fontSize: 20,
+    color: THEME.text,
+    marginTop: 10,
+    marginBottom: 15,
+    fontWeight: 'bold',
+  },
+  list: {
+    paddingBottom: 20,
   },
   item: {
-    backgroundColor: '#333',
+    backgroundColor: THEME.card,
     padding: 15,
+    borderRadius: 10,
     marginVertical: 5,
-    borderRadius: 5,
-  },
-  text: {
-    color: '#fff',
-  },
-  button: {
-    backgroundColor: '#555',
-    padding: 10,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
-    borderRadius: 5,
   },
-  buttonText: {
-    color: '#fff',
+  itemText: {
+    color: THEME.text,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  itemDate: {
+    color: '#666',
+    fontSize: 12,
   },
 });
