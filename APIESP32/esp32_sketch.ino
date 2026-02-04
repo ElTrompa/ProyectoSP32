@@ -18,7 +18,7 @@ const char* password = "123456789";
 // IMPORTANTE: Si usas Docker, asegurate de que esta IP es la de tu PC (ipconfig)
 // y NO "localhost" ni "127.0.0.1". Windows Firewall debe permitir puerto 8080.
 // ------------------------------------------------------------------------------------
-const char* serverName = "http://10.245.113.62:8080/api/datos"; 
+const char* serverName = "http://10.123.248.62:8080/api/datos"; 
  
 
 // =====================
@@ -33,10 +33,11 @@ WebServer server(80);
 #define DHTTYPE  DHT11
 
 #define LDRPIN   5      // D5 (digital)
-#define LEDPIN   2
+// #define LEDPIN   2 // Comentado porque usaremos el pin 2 para el altavoz
 
 #define SS_PIN   21
 #define RST_PIN  22
+#define BUZZER_PIN 2 // Usamos D2 (GPIO 2) que es salida válida
 
 // =====================
 // OBJETOS
@@ -76,12 +77,20 @@ Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS );
 // =====================
 // DECLARACIÓN DE FUNCIONES PREVIAS
 // =====================
-void enviarDatosAPI(float temp, float hum, bool iluminadad, String uid, String token, String pin);
+void enviarDatosAPI(float temp, float hum, bool iluminadad, String uid, String token, String pin, String tipo);
+void beep(unsigned int duration);
 
 // =====================
 // FUNCIONES AUXILIARES
 // =====================
-void enviarDatosAPI(float temp, float hum, bool iluminadad, String uid, String token, String pin) {
+void beep(unsigned int duration) {
+  tone(BUZZER_PIN, 2000); // Iniciar tono
+  delay(duration);        // Esperar
+  noTone(BUZZER_PIN);     // Parar tono
+  digitalWrite(BUZZER_PIN, LOW); // Asegurar que se quede en LOW
+}
+
+void enviarDatosAPI(float temp, float hum, bool iluminadad, String uid, String token, String pin, String tipo) {
     if(WiFi.status() == WL_CONNECTED){
         HTTPClient http;
         http.begin(serverName);
@@ -100,6 +109,10 @@ void enviarDatosAPI(float temp, float hum, bool iluminadad, String uid, String t
         if (pin != "") {
              doc["pin"] = pin;
              hayDatos = true;
+        }
+        
+        if (tipo != "") {
+            doc["tipo"] = tipo;
         }
 
         // 2. Si no es Login, miramos si es UID simple o Sensores
@@ -153,6 +166,9 @@ void enviarDatosAPI(float temp, float hum, bool iluminadad, String uid, String t
             if (esAcceso) {
                 lcd.clear();
                 if (httpResponseCode == 200) {
+                    // ACCESO CORRECTO (Pitido: Beep-Beep)
+                    beep(100); delay(100); beep(100); 
+
                     if (response.indexOf("SALIDA") >= 0) {
                         lcd.setCursor(0, 0); lcd.print("Hasta luego");
                         lcd.setCursor(0, 1); lcd.print(currentUsuarioLeido); 
@@ -166,6 +182,9 @@ void enviarDatosAPI(float temp, float hum, bool iluminadad, String uid, String t
                         lcd.setCursor(0, 1); lcd.print("Concedido");
                     }
                 } else {
+                    // ACCESO DENEGADO (Pitido: Beep largo)
+                    beep(1000);
+
                     lcd.setCursor(0, 0); lcd.print("Acceso");
                     lcd.setCursor(0, 1); lcd.print("Denegado");
                 }
@@ -183,6 +202,9 @@ void enviarDatosAPI(float temp, float hum, bool iluminadad, String uid, String t
 
             // --- ERROR EN PANTALLA LCD ---
             if (esAcceso) {
+                // ERROR CONEXION (Pitido: 3 beeps rápidos error)
+                beep(200); delay(100); beep(200); delay(100); beep(200);
+
                 lcd.clear();
                 lcd.setCursor(0, 0); lcd.print("Error Conexion");
                 lcd.setCursor(0, 1); lcd.print("Err: " + String(httpResponseCode));
@@ -226,7 +248,7 @@ void handleRoot() {
   server.send(200, "application/json", json);
   
   // Guardar también en Spring Boot cuando se haga la petición web
-  enviarDatosAPI(t, h, luz, "", "", ""); 
+  enviarDatosAPI(t, h, luz, "", "", "", ""); 
 }
 
 // =====================
@@ -258,7 +280,10 @@ void setup() {
   Serial.println("Servidor Web Iniciado");
 
   pinMode(LDRPIN, INPUT);
-  pinMode(LEDPIN, OUTPUT);
+  // pinMode(LEDPIN, OUTPUT); // Comentado
+  pinMode(BUZZER_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+  noTone(BUZZER_PIN);
 
   // DHT
   dht.begin();
@@ -282,6 +307,9 @@ void loop() {
   // 2. COMPROBAR RFID (SIEMPRE ACTIVO)
   if (mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()) {
       Serial.println("\n🔐 TARJETA DETECTADA");
+      
+      // Pitar altavoz D2
+      beep(200);
 
       // --- OBTENER UID REAL DE LA TARJETA ---
       String uidReal = "";
@@ -375,6 +403,37 @@ void loop() {
         delay(1500);
       }
       
+      // --- SELECCION DE MOTIVO ---
+      String tipoLeido = "";
+      lcd.clear();
+      lcd.setCursor(0, 0); lcd.print("A:Jor B:Pau");
+      lcd.setCursor(0, 1); lcd.print("C:Med D:Otro");
+      
+      bool motivoSeleccionado = false;
+      unsigned long startTimeMotivo = millis();
+      
+      while (millis() - startTimeMotivo < 10000 && !motivoSeleccionado) {
+          char key = keypad.getKey();
+          if (key) {
+              beep(100);
+              if (key == 'A') { tipoLeido = "JORNADA"; motivoSeleccionado = true; }
+              else if (key == 'B') { tipoLeido = "PAUSA"; motivoSeleccionado = true; } // Backend decide Start/End
+              else if (key == 'C') { tipoLeido = "MEDICO"; motivoSeleccionado = true; } // Backend decide Out/In
+              else if (key == 'D') { tipoLeido = "CONSULTA"; motivoSeleccionado = true; } 
+              else if (key == '#') { tipoLeido = ""; motivoSeleccionado = true; } // Automatic / Jump
+          }
+      }
+      
+      if (!motivoSeleccionado) {
+          Serial.println("Timeout Motivo - Enviando sin tipo (Automático)");
+      } else {
+          Serial.println("Motivo seleccionado: " + tipoLeido);
+          lcd.clear();
+          lcd.setCursor(0,0); lcd.print("Seleccionado:");
+          lcd.setCursor(0,1); lcd.print(tipoLeido);
+          delay(1000);
+      }
+
       // --- PEDIR PIN ---
       String pinIngresado = "";
       lcd.clear();
@@ -389,6 +448,7 @@ void loop() {
       while (millis() - startTime < 10000 && !pinCompleto) { 
         char key = keypad.getKey();
         if (key) {
+           beep(100); // Feedback sonoro tecla (sin bloquear demasiado)
            startTime = millis(); // Reset timeout al pulsar tecla
            
            if (key == '#') {
@@ -420,16 +480,16 @@ void loop() {
       if (tokenLeido != "") {
           // CASO 1: TOKEN LEIDO + PIN
           Serial.println("✅ Enviando Token + PIN");
-          enviarDatosAPI(NAN, NAN, false, "", tokenLeido, pinIngresado);
+          enviarDatosAPI(NAN, NAN, false, "", tokenLeido, pinIngresado, tipoLeido);
       } else if (tokenLeido == "" && !errorLectura) {
           // CASO 2: SOLO UID + PIN
           Serial.println("⚠️ Tarjeta sin token, enviando UID: " + uidReal);
-          enviarDatosAPI(NAN, NAN, false, uidReal, "", pinIngresado); 
+          enviarDatosAPI(NAN, NAN, false, uidReal, "", pinIngresado, tipoLeido); 
       } else {
           // CASO 3: Error lectura + PIN
           Serial.println("⚠️ Error de lectura");
           Serial.println("📤 Enviando UID como respaldo: " + uidReal);
-          enviarDatosAPI(NAN, NAN, false, uidReal, "", pinIngresado); 
+          enviarDatosAPI(NAN, NAN, false, uidReal, "", pinIngresado, tipoLeido); 
       }
 
       mfrc522.PICC_HaltA();
@@ -452,7 +512,7 @@ void loop() {
       bool luz = !(l == HIGH); // true si hay luz (ajustar según tu pullup/down)
 
       // Enviamos datos (uid, token, pin vacíos)
-      enviarDatosAPI(t, h, luz, "", "", ""); 
+      enviarDatosAPI(t, h, luz, "", "", "", ""); 
       
       lastSensorUpdate = millis();
   }

@@ -9,6 +9,7 @@ public class DatosSensorDTO {
     private String password;
     private String token;
     private String pin;
+    private String tipo;
 
     public String getPin() {
         return pin;
@@ -16,6 +17,14 @@ public class DatosSensorDTO {
 
     public void setPin(String pin) {
         this.pin = pin;
+    }
+
+    public String getTipo() {
+        return tipo;
+    }
+
+    public void setTipo(String tipo) {
+        this.tipo = tipo;
     }
 
     public Double getTemperatura() {

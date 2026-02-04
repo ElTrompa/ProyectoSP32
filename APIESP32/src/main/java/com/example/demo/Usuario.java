@@ -12,6 +12,11 @@ public class Usuario {
     private String password; // Se usará como PIN tambien
     private String rfidToken;
 
+    // --- NUEVOS CAMPOS ---
+    private String rol = "trabajador";
+    private boolean isAdmin = false;
+    private String horario = "09:00 - 18:00";
+
     public Usuario() {}
 
     public Usuario(String username, String password) {
@@ -55,5 +60,29 @@ public class Usuario {
 
     public void setRfidToken(String rfidToken) {
         this.rfidToken = rfidToken;
+    }
+
+    public String getRol() {
+        return rol;
+    }
+
+    public void setRol(String rol) {
+        this.rol = rol;
+    }
+
+    public boolean isAdmin() {
+        return isAdmin;
+    }
+
+    public void setAdmin(boolean admin) {
+        isAdmin = admin;
+    }
+
+    public String getHorario() {
+        return horario;
+    }
+
+    public void setHorario(String horario) {
+        this.horario = horario;
     }
 }
