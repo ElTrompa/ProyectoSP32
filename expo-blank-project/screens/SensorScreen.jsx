@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, FlatList, StyleSheet, Button, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, StyleSheet, Button, ActivityIndicator, Platform } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import axios from 'axios';
@@ -26,28 +26,41 @@ export default function SensorScreen() {
     }, [])
   );
 
+  const getStatusMessage = (temp, hum) => {
+      if (temp > 30) return { text: "¡Alerta de Calor!", color: THEME.danger };
+      if (hum > 80) return { text: "Humedad Alta", color: THEME.warning };
+      return { text: "Condiciones Óptimas", color: THEME.success };
+  };
+
   const renderHeader = () => {
       if(!sensorData || sensorData.length === 0) return null;
-      // Because we changed backend to only return the latest ONE, list[0] is the current state
-      // If we revert backend to all, we take [0] or sort. 
-      // Assuming user wants "Latest" big and "History" small, but since API now returns only latest...
-      // wait, user asked for "latest" previously.
-      // If I want charts I need history. But let's stick to what we have.
       
       const latest = sensorData[0] || {};
-      
+      const status = getStatusMessage(latest.temperatura, latest.humedad);
+
       return (
-        <View style={styles.heroContainer}>
-            <View style={styles.heroCard}>
-                <MaterialCommunityIcons name="thermometer" size={48} color={THEME.danger} />
-                <Text style={styles.heroValue}>{latest.temperatura}C</Text>
-                <Text style={styles.heroLabel}>Temperatura Actual</Text>
+        <View>
+            <View style={[styles.statusBanner, { backgroundColor: status.color + '20', borderColor: status.color }]}>
+                <MaterialCommunityIcons name="information-outline" size={24} color={status.color} />
+                <Text style={[styles.statusText, { color: status.color }]}>{status.text}</Text>
             </View>
-            
-            <View style={styles.heroCard}>
-                <MaterialCommunityIcons name="water-percent" size={48} color={THEME.primary} />
-                <Text style={styles.heroValue}>{latest.humedad}%</Text>
-                <Text style={styles.heroLabel}>Humedad Actual</Text>
+
+            <View style={styles.heroContainer}>
+                <View style={styles.heroCard}>
+                    <MaterialCommunityIcons name="thermometer" size={48} color={THEME.danger} />
+                    <Text style={styles.heroValue}>
+                        {latest.temperatura ? `${parseFloat(latest.temperatura).toFixed(1)}°C` : '--'}
+                    </Text>
+                    <Text style={styles.heroLabel}>Temperatura Actual</Text>
+                </View>
+                
+                <View style={styles.heroCard}>
+                    <MaterialCommunityIcons name="water-percent" size={48} color={THEME.primary} />
+                    <Text style={styles.heroValue}>
+                        {latest.humedad ? `${parseFloat(latest.humedad).toFixed(1)}%` : '--'}
+                    </Text>
+                    <Text style={styles.heroLabel}>Humedad Actual</Text>
+                </View>
             </View>
         </View>
       );
@@ -60,8 +73,8 @@ export default function SensorScreen() {
          <Text style={styles.date}>{new Date(item.fecha).toLocaleString()}</Text>
       </View>
       <View style={styles.row}>
-          <Text style={styles.detail}>Temp: {item.temperatura}C</Text>
-          <Text style={styles.detail}>Hum: {item.humedad}%</Text>
+          <Text style={styles.detail}>Temp: {parseFloat(item.temperatura).toFixed(1)}°C</Text>
+          <Text style={styles.detail}>Hum: {parseFloat(item.humedad).toFixed(1)}%</Text>
       </View>
     </View>
   );
@@ -111,6 +124,23 @@ const styles = StyleSheet.create({
       alignItems: 'center',
       borderWidth: 1,
       borderColor: THEME.secondary,
+      ...Platform.select({
+        web: { boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' },
+        default: { elevation: 3, shadowColor: '#000', shadowOffset: {height:2}, shadowOpacity:0.2 }
+      })
+  },
+  statusBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 15,
+      borderRadius: 12,
+      borderWidth: 1,
+      marginBottom: 20,
+  },
+  statusText: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      marginLeft: 10,
   },
   heroValue: {
       fontSize: 32,

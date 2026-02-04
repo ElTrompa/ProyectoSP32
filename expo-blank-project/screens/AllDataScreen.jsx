@@ -71,7 +71,7 @@ export default function AllDataScreen() {
       const style = getTypeStyle(item.type);
       
       let detailText = "";
-      if (item.type === 'METEO') detailText = `Temp: ${item.temperatura}C | Hum: ${item.humedad}%`;
+      if (item.type === 'METEO') detailText = `Temp: ${parseFloat(item.temperatura).toFixed(1)}°C | Hum: ${parseFloat(item.humedad).toFixed(1)}%`;
       else if (item.type === 'LUZ') detailText = `Nivel: ${item.nivelLuz}`;
       else if (item.type === 'RFID') detailText = `UID: ${item.uid}`;
       else if (item.type === 'ACCESS') detailText = `${item.usuario} - ${item.tipo}`;

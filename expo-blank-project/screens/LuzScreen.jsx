@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Platform } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import axios from 'axios';
 import { API_URL, THEME } from '../config';
@@ -17,12 +17,23 @@ export default function LuzScreen() {
     setLoading(true);
     try {
       const response = await axios.get(API_URL + '/datos');
-      const data = response.data.luz || [];
-      // Sort desc
+      let data = response.data.luz || [];
+      
+      // Handle case where API returns a single object instead of array
+      if (!Array.isArray(data)) {
+          data = [data]; 
+      }
+
+      // Sort desc by date
       data.sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
-      setLuzData(data);
-      if (data.length > 0) {
-        setCurrentLevel(data[0].nivelLuz);
+
+      // User requested only the latest value
+      const latestData = data.slice(0, 1);
+      
+      setLuzData(latestData);
+      
+      if (latestData.length > 0) {
+        setCurrentLevel(latestData[0].nivelLuz);
       }
     } catch (error) {
       console.error(error);
@@ -92,11 +103,18 @@ const styles = StyleSheet.create({
     backgroundColor: THEME.card,
     padding: 30,
     borderRadius: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4.65,
-    elevation: 8,
+    ...Platform.select({
+      web: {
+        boxShadow: '0px 4px 8px rgba(0, 0, 0, 0.3)',
+      },
+      default: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 4.65,
+        elevation: 8,
+      },
+    }),
   },
   heroValue: {
     fontSize: 48,

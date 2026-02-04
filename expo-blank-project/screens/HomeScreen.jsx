@@ -1,5 +1,5 @@
 ﻿import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, Platform } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import axios from 'axios';
@@ -14,31 +14,37 @@ export default function HomeScreen() {
     lastAccess: 'N/A'
   });
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Buenos Días';
+    if (hour < 18) return 'Buenas Tardes';
+    return 'Buenas Noches';
+  };
+
   const fetchStats = async () => {
     try {
-      // Fetch data concurrently
-      const [sensorRes, usersRes, presenciaRes] = await Promise.all([
-        axios.get(API_URL + '/datos/meteorologia'),
-        axios.get(API_URL + '/usuarios'),
-        axios.get(API_URL + '/datos/presencia')
-      ]);
+      // Fetch all data from single endpoint to avoid 404s on individual routes
+      const response = await axios.get(API_URL + '/datos');
+      const data = response.data || {};
+
+      const meteorologia = data.meteorologia || [];
+      const usuarios = data.usuarios || [];
+      const presencia = data.presencia || [];
 
       // Process Temp
       let temp = '--';
-      if (sensorRes.data && sensorRes.data.length > 0) {
-         // Sort by date desc just in case
-         // Check if data is array inside array or object? Usually List<Metereologia>
-         const sorted = sensorRes.data.sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
+      if (meteorologia.length > 0) {
+         const sorted = meteorologia.sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
          if (sorted.length > 0) temp = sorted[0].temperatura;
       }
 
       // Process Users
-      const usersCount = usersRes.data ? usersRes.data.length : 0;
+      const usersCount = usuarios.length;
 
       // Process Last Access
       let lastAccess = 'Sin registros';
-      if (presenciaRes.data && presenciaRes.data.length > 0) {
-          const sorted = presenciaRes.data.sort((a,b) => new Date(b.fechaHora) - new Date(a.fechaHora));
+      if (presencia.length > 0) {
+          const sorted = presencia.sort((a,b) => new Date(b.fechaHora) - new Date(a.fechaHora));
           if (sorted.length > 0) {
             const last = sorted[0];
             lastAccess = new Date(last.fechaHora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -59,6 +65,9 @@ export default function HomeScreen() {
 
   useEffect(() => {
     fetchStats();
+    
+    const interval = setInterval(fetchStats, 10000); // Auto-refresh every 10 seconds
+    return () => clearInterval(interval);
   }, []);
 
   const DashboardCard = ({ icon, title, value, color, onPress }) => (
@@ -79,36 +88,53 @@ export default function HomeScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={THEME.primary} />}
     >
       <View style={styles.header}>
-        <Text style={styles.greeting}>Panel de Control</Text>
-        <Text style={styles.subGreeting}>Resumen del Sistema</Text>
+        <View>
+          <Text style={styles.greeting}>{getGreeting()}</Text>
+          <Text style={styles.subGreeting}>Sistema de Monitoreo Activo</Text>
+        </View>
+        <View style={styles.avatarContainer}>
+           <MaterialCommunityIcons name="robot" size={30} color={THEME.primary} />
+        </View>
       </View>
 
       <View style={styles.grid}>
           <DashboardCard 
             icon="thermometer" 
-            title="Temperatura" 
-            value={`${stats.temp}C`} 
-            color="#FF6B6B"
+            title="Temp. Actual" 
+            value={stats.temp !== '--' ? `${parseFloat(stats.temp).toFixed(1)}°C` : '--'} 
+            color={THEME.danger}
             onPress={() => navigation.navigate('Sensor')} 
           />
           <DashboardCard 
             icon="account-group" 
-            title="Usuarios" 
+            title="Usuarios Reg." 
             value={stats.users} 
-            color="#4ECDC4"
+            color={THEME.accent}
             onPress={() => navigation.navigate('Usuario')} 
           />
           <DashboardCard 
             icon="clock-outline" 
             title="Último Acceso" 
             value={stats.lastAccess} 
-            color="#FFE66D"
+            color={THEME.warning}
             onPress={() => navigation.navigate('Presencia')} 
+          />
+           <DashboardCard 
+            icon="database-eye" 
+            title="Estado DB" 
+            value={"Online"} 
+            color={THEME.success}
+            onPress={() => navigation.navigate('AllData')} 
           />
       </View>
 
       <View style={styles.section}>
           <Text style={styles.sectionTitle}>Acceso Rápido</Text>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('Trabajador')}>
+              <MaterialCommunityIcons name="account-hard-hat" size={24} color={THEME.text} />
+              <Text style={styles.actionText}>Portal del Trabajador</Text>
+              <MaterialCommunityIcons name="chevron-right" size={24} color={THEME.textSecondary} />
+          </TouchableOpacity>
           <TouchableOpacity style={styles.actionBtn} onPress={() => navigation.navigate('Luz')}>
               <MaterialCommunityIcons name="white-balance-sunny" size={24} color={THEME.text} />
               <Text style={styles.actionText}>Monitor de Luz</Text>
@@ -137,31 +163,53 @@ const styles = StyleSheet.create({
   header: {
     padding: 20,
     paddingTop: 40,
+    marginBottom: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   greeting: {
     fontSize: 28,
-    fontWeight: 'bold',
+    fontWeight: '800', // Bolder
     color: THEME.text,
+    letterSpacing: 0.5,
   },
   subGreeting: {
-    fontSize: 16,
+    fontSize: 14,
     color: THEME.textSecondary,
     marginTop: 5,
+    fontWeight: '500',
+  },
+  avatarContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: THEME.card,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: THEME.secondary,
   },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    padding: 10,
+    paddingHorizontal: 15,
     justifyContent: 'space-between',
   },
   card: {
     backgroundColor: THEME.card,
-    borderRadius: 16,
-    padding: 15,
-    margin: 5,
-    width: '47%', // roughly half
-    minHeight: 120,
+    borderRadius: 20, // More rounded
+    padding: 18,
+    marginVertical: 8,
+    width: '48%', 
+    minHeight: 140,
     justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: THEME.secondary,
+    ...Platform.select({
+       web: { boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' },
+       default: { elevation: 4, shadowColor: '#000', shadowOffset: {width:0, height:2}, shadowOpacity:0.2, shadowRadius:3 }
+    })
   },
   iconContainer: {
       width: 50,
