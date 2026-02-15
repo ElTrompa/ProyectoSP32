@@ -18,7 +18,7 @@ const char* password = "123456789";
 // IMPORTANTE: Si usas Docker, asegurate de que esta IP es la de tu PC (ipconfig)
 // y NO "localhost" ni "127.0.0.1". Windows Firewall debe permitir puerto 8080.
 // ------------------------------------------------------------------------------------
-const char* serverName = "http://10.123.248.62:8080/api/datos"; 
+const char* serverName = "hc:8080/api/datos";
  
 
 // =====================
