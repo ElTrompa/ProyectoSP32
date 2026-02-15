@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity,  StyleSheet, Alert, ActivityIn
 import axios from 'axios';
 import { useNavigation } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { API_URL, THEME } from '../config';
+import { API_URL, THEME, USE_MOCK } from '../config';
 
 export default function LoginScreen() {
     const navigation = useNavigation();
@@ -21,6 +21,18 @@ export default function LoginScreen() {
     };
 
     const handleLogin = async () => {
+        if (USE_MOCK) {
+            console.log('MOCK LOGIN ACTIVE');
+            if (username.toLowerCase() === 'admin') {
+                navigation.replace('Home');
+            } else {
+                // Si no se escribe nada, entrar como trabajador por defecto
+                const userToUse = username || 'juan_perez'; 
+                navigation.replace('Trabajador', { username: userToUse });
+            }
+            return;
+        }
+
         if (!username || !password) {
             Alert.alert('Error', 'Por favor ingresa usuario y contraseña');
             return;

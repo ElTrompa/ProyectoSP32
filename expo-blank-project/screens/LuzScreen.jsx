@@ -2,7 +2,7 @@
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, Platform } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import axios from 'axios';
-import { API_URL, THEME } from '../config';
+import { API_URL, THEME, USE_MOCK } from '../config';
 
 export default function LuzScreen() {
   const [luzData, setLuzData] = useState([]);
@@ -16,8 +16,16 @@ export default function LuzScreen() {
   const fetchLuzData = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(API_URL + '/datos');
-      let data = response.data.luz || [];
+      let data = [];
+      if (USE_MOCK) {
+          data = [
+              { id: 1, nivelLuz: 250, fecha: new Date().toISOString() },
+              { id: 2, nivelLuz: 100, fecha: new Date(Date.now() - 3600000).toISOString() }
+          ];
+      } else {
+          const response = await axios.get(API_URL + '/datos');
+          data = response.data.luz || [];
+      }
       
       // Handle case where API returns a single object instead of array
       if (!Array.isArray(data)) {

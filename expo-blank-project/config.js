@@ -1,5 +1,8 @@
 ﻿export const API_URL = 'http://10.120.187.62:8080/api';
 
+// Cambia a true para usar datos falsos y evitar llamadas al backend
+export const USE_MOCK = true;
+
 export const THEME = {
   background: '#0F172A', // Slate 900
   card: '#1E293B',       // Slate 800

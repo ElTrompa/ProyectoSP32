@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ActivityIndicator, Alert } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import axios from 'axios';
-import { API_URL, THEME } from '../config';
+import { API_URL, THEME, MOTIVES, USE_MOCK } from '../config';
 
 export default function TrabajadorScreen({ route }) {
   const [loading, setLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState(false);
   const [username, setUsername] = useState(route.params?.username || '');
   const [isLoggedIn, setIsLoggedIn] = useState(!!route.params?.username);
   const [filterMode, setFilterMode] = useState(7); // 7 = week, 30 = month, 0 = all, 'day' = specific date
@@ -58,13 +59,28 @@ export default function TrabajadorScreen({ route }) {
       // Assuming backend only supports dias=X (last X days), fetching all is safer for specific past dates.
       const queryDays = (filterMode === 'day') ? 0 : filterMode;
       
-      const filteredReqPromise = axios.get(`${API_URL}/sesiones/usuario/${targetUser}?dias=${queryDays}`);
-      const logsReqPromise = axios.get(`${API_URL}/datos`); 
+      let filteredSessions = [];
+      let rawLogs = [];
 
-      const [filteredRes, logsRes] = await Promise.all([filteredReqPromise, logsReqPromise]);
-      
-      let filteredSessions = filteredRes.data || [];
-      const rawLogs = logsRes.data.presencia || [];
+      if (USE_MOCK) {
+          await new Promise(r => setTimeout(r, 500)); // Fake delay
+          // Mock Data
+          rawLogs = [
+              { fechaHora: new Date().toISOString(), tipo: 'ENTRADA', usuario: targetUser, accesoPermitido: true },
+              { fechaHora: new Date(Date.now() - 3600000).toISOString(), tipo: 'SALIDA', usuario: targetUser, accesoPermitido: true },
+              { fechaHora: new Date(Date.now() - 7200000).toISOString(), tipo: 'ENTRADA', usuario: targetUser, accesoPermitido: true },
+          ];
+          filteredSessions = [
+              { inicio: new Date(Date.now() - 7200000).toISOString(), fin: new Date(Date.now() - 3600000).toISOString(), duracionMinutos: 60 }
+          ];
+      } else {
+          const filteredReqPromise = axios.get(`${API_URL}/sesiones/usuario/${targetUser}?dias=${queryDays}`);
+          const logsReqPromise = axios.get(`${API_URL}/datos`); 
+
+          const [filteredRes, logsRes] = await Promise.all([filteredReqPromise, logsReqPromise]);
+          filteredSessions = filteredRes.data || [];
+          rawLogs = logsRes.data.presencia || [];
+      }
 
       // Calculate Hours Filtered
       if (filterMode === 'day') {
@@ -104,6 +120,9 @@ export default function TrabajadorScreen({ route }) {
           if (!denied) {
               if (lastLog.tipo === 'ENTRADA') status = 'IN';
               else if (lastLog.tipo === 'SALIDA') status = 'OUT';
+              else if (lastLog.tipo === 'INICIO_PAUSA') status = 'PAUSED';
+              else if (lastLog.tipo === 'CONSULTA') status = 'PAUSED';
+              else if (lastLog.tipo === 'FIN_PAUSA') status = 'IN';
           }
           lastTime = lastLog.fechaHora;
       }
@@ -131,6 +150,41 @@ export default function TrabajadorScreen({ route }) {
       const h = Math.floor(hours || 0);
       const m = Math.round(((hours || 0) - h) * 60);
       return `${h}h ${m}m`;
+  };
+
+  const handleFichar = async (tipo) => {
+      if (!username) return;
+      
+      setActionLoading(true);
+      if (USE_MOCK) {
+          setTimeout(() => {
+              Alert.alert('Éxito (Mock)', `Fichaje registrado: ${MOTIVES[tipo]?.label || tipo}`);
+              setStats(prev => ({
+                  ...prev, 
+                  status: (tipo === 'ENTRADA' || tipo === 'FIN_PAUSA') ? 'IN' : ((tipo === 'SALIDA') ? 'OUT' : 'PAUSED')
+              }));
+              setActionLoading(false);
+          }, 500);
+          return;
+      }
+
+      try {
+          const payload = {
+              usuario: username,
+              tipo: tipo,
+              metodoAuth: 'APP_MOVIL',
+              fechaHora: new Date().toISOString()
+          };
+
+          await axios.post(`${API_URL}/presencia`, payload);
+          
+          Alert.alert('Éxito', `Fichaje registrado: ${MOTIVES[tipo]?.label || tipo}`);
+          fetchWorkerData(); // Refrescar datos
+      } catch (error) {
+          console.error(error);
+          Alert.alert('Error', 'No se pudo registrar el fichaje. Verifica la conexión o el servidor.');
+      }
+      setActionLoading(false);
   };
 
   const FilterButton = ({ label, mode }) => (
@@ -166,15 +220,15 @@ export default function TrabajadorScreen({ route }) {
       );
   }
 
-  return (
-    <View style={styles.container}>
+  const renderHeader = () => (
+    <View>
       <View style={styles.header}>
           <TouchableOpacity onPress={() => setIsLoggedIn(false)} style={styles.backButton}>
              <MaterialCommunityIcons name="arrow-left" size={24} color={THEME.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Hola, {username}</Text>
-          <TouchableOpacity onPress={() => fetchWorkerData()}>
-             <MaterialCommunityIcons name="refresh" size={24} color={THEME.primary} />
+          <TouchableOpacity onPress={() => fetchWorkerData()} disabled={loading}>
+             {loading ? <ActivityIndicator size="small" color={THEME.primary} /> : <MaterialCommunityIcons name="refresh" size={24} color={THEME.primary} />}
           </TouchableOpacity>
       </View>
 
@@ -188,6 +242,52 @@ export default function TrabajadorScreen({ route }) {
               <Text style={styles.lastActionText}>
                   Último: {new Date(stats.lastActionTime).toLocaleString()}
               </Text>
+          )}
+      </View>
+
+      {/* ACTION BUTTONS PANEL */}
+      <View style={styles.actionsContainer}>
+          {actionLoading ? (
+               <ActivityIndicator size="large" color={THEME.primary} />
+          ) : (
+             <>
+                {(stats.status === 'OUT' || stats.status === 'UNKNOWN') && (
+                    <TouchableOpacity style={[styles.bigButton, { backgroundColor: THEME.success }]} onPress={() => handleFichar('ENTRADA')}>
+                         <MaterialCommunityIcons name="login" size={32} color="#FFF" />
+                         <Text style={styles.bigButtonText}>REGISTRAR ENTRADA</Text>
+                    </TouchableOpacity>
+                )}
+
+                {stats.status === 'IN' && (
+                    <View style={styles.actionGrid}>
+                        <TouchableOpacity style={[styles.gridButton, { backgroundColor: THEME.warning }]} onPress={() => handleFichar('INICIO_PAUSA')}>
+                            <MaterialCommunityIcons name="coffee" size={28} color="#FFF" />
+                            <Text style={styles.gridButtonText}>Pausa</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.gridButton, { backgroundColor: MOTIVES.CONSULTA?.color || '#8B5CF6' }]} onPress={() => handleFichar('CONSULTA')}>
+                            <MaterialCommunityIcons name="doctor" size={28} color="#FFF" />
+                            <Text style={styles.gridButtonText}>Médico</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.gridButton, { backgroundColor: THEME.danger }]} onPress={() => handleFichar('SALIDA')}>
+                            <MaterialCommunityIcons name="logout" size={28} color="#FFF" />
+                            <Text style={styles.gridButtonText}>Salida</Text>
+                        </TouchableOpacity>
+                    </View>
+                )}
+
+                {stats.status === 'PAUSED' && (
+                     <View style={styles.actionGrid}>
+                        <TouchableOpacity style={[styles.gridButton, { backgroundColor: THEME.primary, flex: 2 }]} onPress={() => handleFichar('FIN_PAUSA')}>
+                            <MaterialCommunityIcons name="coffee-off" size={28} color="#000" />
+                            <Text style={[styles.gridButtonText, { color: '#000' }]}>REANUDAR TRABAJO</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.gridButton, { backgroundColor: THEME.danger, flex: 1 }]} onPress={() => handleFichar('SALIDA')}>
+                            <MaterialCommunityIcons name="logout" size={28} color="#FFF" />
+                            <Text style={styles.gridButtonText}>Salida</Text>
+                        </TouchableOpacity>
+                     </View>
+                )}
+             </>
           )}
       </View>
 
@@ -234,8 +334,13 @@ export default function TrabajadorScreen({ route }) {
       <Text style={styles.sectionTitle}>
           Historial {filterMode === 'day' ? 'del Día' : (filterMode === 0 ? 'Completo' : `(${filterMode} días)`)}
       </Text>
+    </View>
+  );
 
+  return (
+    <View style={styles.container}>
       <FlatList
+          ListHeaderComponent={renderHeader}
           data={logs}
           keyExtractor={(item, index) => index.toString()}
           contentContainerStyle={{ paddingBottom: 20 }}
@@ -285,6 +390,13 @@ const styles = StyleSheet.create({
   statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 50, gap: 10, marginBottom: 10 },
   statusText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
   lastActionText: { color: THEME.textSecondary, fontSize: 12 },
+
+  actionsContainer: { marginBottom: 20 },
+  bigButton: { backgroundColor: THEME.success, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', padding: 18, borderRadius: 12, elevation: 4 },
+  bigButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 18, marginLeft: 10 },
+  actionGrid: { flexDirection: 'row', gap: 10 },
+  gridButton: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 15, borderRadius: 12, elevation: 3 },
+  gridButtonText: { color: '#FFF', fontWeight: 'bold', fontSize: 14, marginTop: 5 },
   
   filterContainer: { flexDirection: 'row', backgroundColor: THEME.card, borderRadius: 12, padding: 5, marginBottom: 10 },
   filterBtn: { flex: 1, paddingVertical: 10, alignItems: 'center', borderRadius: 8 },

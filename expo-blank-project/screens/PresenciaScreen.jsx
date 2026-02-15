@@ -2,7 +2,7 @@
 import { View, Text, FlatList, StyleSheet, ActivityIndicator, TextInput, TouchableOpacity } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import axios from 'axios';
-import { API_URL, THEME } from '../config';
+import { API_URL, THEME, USE_MOCK } from '../config';
 
 export default function PresenciaScreen() {
   const [presenciaData, setPresenciaData] = useState([]);
@@ -50,8 +50,18 @@ export default function PresenciaScreen() {
   const fetchPresenciaData = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(API_URL + '/datos');
-      const data = response.data.presencia || [];
+      let data = [];
+      if (USE_MOCK) {
+          data = [
+              { id: 1, usuario: 'admin', fechaHora: new Date().toISOString(), tipo: 'ENTRADA', metodoAuth: 'RFID', accesoPermitido: true },
+              { id: 2, usuario: 'juan', fechaHora: new Date(Date.now() - 100000).toISOString(), tipo: 'SALIDA', metodoAuth: 'APP', accesoPermitido: true },
+              { id: 3, usuario: 'desconocido', fechaHora: new Date(Date.now() - 200000).toISOString(), tipo: 'ENTRADA', metodoAuth: 'RFID', accesoPermitido: false, detalles: 'Tarjeta no registrada' },
+          ];
+      } else {
+          const response = await axios.get(API_URL + '/datos');
+          data = response.data.presencia || [];
+      }
+      
       // Sort desc
       data.sort((a,b) => new Date(b.fechaHora) - new Date(a.fechaHora));
       setPresenciaData(data);

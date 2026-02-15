@@ -3,7 +3,7 @@ import { View, Text, FlatList, StyleSheet, Button, ActivityIndicator, Platform }
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import axios from 'axios';
-import { API_URL, THEME } from '../config';
+import { API_URL, THEME, USE_MOCK } from '../config';
 
 export default function SensorScreen() {
   const [sensorData, setSensorData] = useState([]);
@@ -12,8 +12,16 @@ export default function SensorScreen() {
   const fetchSensorData = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(API_URL + '/datos/meteorologia');
-      setSensorData(response.data || []);
+      if (USE_MOCK) {
+         setSensorData([
+             { id: 1, temperatura: 26.5, humedad: 45.0, fecha: new Date().toISOString() },
+             { id: 2, temperatura: 26.0, humedad: 46.0, fecha: new Date(Date.now() - 3600000).toISOString() },
+             { id: 3, temperatura: 25.5, humedad: 48.0, fecha: new Date(Date.now() - 7200000).toISOString() },
+         ]);
+      } else {
+         const response = await axios.get(API_URL + '/datos/meteorologia');
+         setSensorData(response.data || []);
+      }
     } catch (error) {
       console.error(error);
     }

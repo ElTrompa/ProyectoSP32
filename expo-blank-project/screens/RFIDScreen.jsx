@@ -2,7 +2,7 @@
 import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import axios from 'axios';
-import { API_URL, THEME } from '../config';
+import { API_URL, THEME, USE_MOCK } from '../config';
 
 export default function RFIDScreen() {
   const [rfidData, setRfidData] = useState([]);
@@ -15,8 +15,17 @@ export default function RFIDScreen() {
   const fetchRfidData = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(API_URL + '/datos');
-      const data = response.data.rfid || [];
+      let data = [];
+      if (USE_MOCK) {
+          data = [
+              { id: 1, uid: 'E2 45 A1 00', fecha: new Date().toISOString() },
+              { id: 2, uid: 'A1 B2 C3 D4', fecha: new Date(Date.now() - 3600000).toISOString() },
+          ];
+      } else {
+          const response = await axios.get(API_URL + '/datos');
+          data = response.data.rfid || [];
+      }
+
       // Sort desc
       data.sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
       setRfidData(data);

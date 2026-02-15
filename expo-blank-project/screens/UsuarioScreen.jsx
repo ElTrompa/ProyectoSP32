@@ -2,7 +2,7 @@
 import { View, Text, FlatList, StyleSheet, TextInput, Switch, TouchableOpacity, Alert, Modal, Dimensions, ScrollView, ActivityIndicator } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import axios from 'axios';
-import { API_URL, THEME, MOTIVES } from '../config';
+import { API_URL, THEME, MOTIVES, USE_MOCK } from '../config';
 
 const { width } = Dimensions.get('window');
 
@@ -68,8 +68,21 @@ export default function UsuarioScreen() {
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(API_URL + '/datos');
-      const raw = response.data;
+      let raw = {};
+      if (USE_MOCK) {
+         raw = {
+             usuarios: [
+                 { _id: '1', username: 'admin', rol: 'admin', isAdmin: true, rfidToken: '1234' },
+                 { _id: '2', username: 'juan_perez', rol: 'trabajador', isAdmin: false, rfidToken: '5678' }
+             ],
+             presencia: [
+                 { usuario: 'juan_perez', fechaHora: new Date().toISOString(), tipo: 'ENTRADA' }
+             ]
+         };
+      } else {
+         const response = await axios.get(API_URL + '/datos');
+         raw = response.data;
+      }
       
       const userList = raw.usuarios || [];
       const attMap = {};
@@ -122,7 +135,16 @@ export default function UsuarioScreen() {
 
   const handlePrevWeek = () => setCurrentWeekStart(addDays(currentWeekStart, -7));
   const handleNextWeek = () => setCurrentWeekStart(addDays(currentWeekStart, 7));
+if (USE_MOCK) {
+            Alert.alert('Éxito (Mock)', 'Usuario guardado/registrado');
+            setModalVisible(false);
+            setNewUser({ username: '', password: '', rfidToken: '', isAdmin: false });
+            setEditingUser(null);
+            fetchAllData(); 
+            return;
+        }
 
+        
   const handleSaveUser = async () => {
     if(!newUser.username) {
         Alert.alert('Error', 'El nombre de usuario es obligatorio');
@@ -192,6 +214,12 @@ export default function UsuarioScreen() {
   };
   
   const handleDelete = (id, username) => {
+    if (USE_MOCK) {
+        Alert.alert("Eliminado (Mock)", "Usuario eliminado");
+        fetchAllData();
+        return;
+    }
+    
     Alert.alert(
       "Confirmar Eliminación",
       `¿Eliminar al usuario ${username}?`,
@@ -226,6 +254,13 @@ export default function UsuarioScreen() {
 
   const handleSaveSchedule = async () => {
         if(!selectedWorker) return;
+
+        if (USE_MOCK) {
+            Alert.alert('Éxito (Mock)', 'Horario actualizado');
+            setScheduleModalVisible(false);
+            return;
+        }
+
         try {
             const userId = selectedWorker._id || selectedWorker.id;
             await axios.put(`${API_URL}/usuarios/${userId}`, { horario: editingSchedule });

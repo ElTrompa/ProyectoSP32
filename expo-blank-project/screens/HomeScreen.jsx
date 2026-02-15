@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, P
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import axios from 'axios';
-import { API_URL, THEME } from '../config';
+import { API_URL, THEME, USE_MOCK } from '../config';
 
 export default function HomeScreen() {
   const navigation = useNavigation();
@@ -24,8 +24,18 @@ export default function HomeScreen() {
   const fetchStats = async () => {
     try {
       // Fetch all data from single endpoint to avoid 404s on individual routes
-      const response = await axios.get(API_URL + '/datos');
-      const data = response.data || {};
+      let data = {};
+      
+      if (USE_MOCK) {
+          data = {
+              meteorologia: [{ temperatura: 24.5, fecha: new Date() }],
+              usuarios: [1, 2, 3, 4, 5],
+              presencia: [{ fechaHora: new Date(), usuario: 'admin', tipo: 'ENTRADA' }]
+          };
+      } else {
+          const response = await axios.get(API_URL + '/datos');
+          data = response.data || {};
+      }
 
       const meteorologia = data.meteorologia || [];
       const usuarios = data.usuarios || [];

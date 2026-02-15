@@ -2,7 +2,7 @@
 import { View, Text, StyleSheet, FlatList, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import axios from 'axios';
-import { API_URL, THEME } from '../config';
+import { API_URL, THEME, USE_MOCK } from '../config';
 
 export default function AllDataScreen() {
   const [dataList, setDataList] = useState([]);
@@ -16,8 +16,18 @@ export default function AllDataScreen() {
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(API_URL + '/datos');
-      const raw = response.data;
+      let raw = {};
+      if (USE_MOCK) {
+          raw = {
+              meteorologia: [{ temperatura: 26, humedad: 50, fecha: new Date().toISOString() }],
+              luz: [{ nivelLuz: 300, fecha: new Date().toISOString() }],
+              rfid: [{ uid: 'AA BB CC', fecha: new Date().toISOString() }],
+              presencia: [{ usuario: 'admin', tipo: 'ENTRADA', fechaHora: new Date().toISOString() }]
+          };
+      } else {
+          const response = await axios.get(API_URL + '/datos');
+          raw = response.data;
+      }
       
       // Flatten all data into a single timeline
       let unified = [];
